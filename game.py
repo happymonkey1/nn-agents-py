@@ -12,10 +12,10 @@ import matplotlib.pyplot as plt
 # inputs: {last move X, last move Y, north/south border dist, east/west border dist, location X, location Y, nearest border distance}
 NUM_SENSORY_INPUTS = 15
 nn.set_num_input(NUM_SENSORY_INPUTS)
-nn.set_num_hidden(2)
+nn.set_num_hidden(8)
 
 
-GENOME_SIZE = 8
+GENOME_SIZE = 32
 nn.set_genome_size(GENOME_SIZE)
 
 DRAW_BRAIN_DEBUG = True
@@ -285,7 +285,7 @@ class World:
     def create_new_world(width: int, height: int, num_agents: int = None):
         world = World(width, height)
         
-        #world.create_wall(75, 33, 10, 66)
+        world.create_wall(75, 33, 10, 66)
         
         if num_agents is not None:
             world.create_random_agents(num_agents)
@@ -353,7 +353,7 @@ class World:
     def get_agent_blocked_in_direction(self, agent, direction, look_ahead: int = 10):
         x = agent.get_x()
         y = agent.get_y()
-        for i in range(look_ahead):
+        for i in range(1, look_ahead + 1):
             # TODO could be written better
             if direction == Directions.RIGHT:
                 if not self.is_open_tile((x + i, y)):
@@ -442,6 +442,7 @@ class World:
             input_data[8] = 0.0 if self.is_open_tile((agent.get_x(), agent.get_y() - 1)) else 1.0
             input_data[9] = 0.0 if self.is_open_tile((agent.get_x() + 1, agent.get_y())) else 1.0
             input_data[10] = 0.0 if self.is_open_tile((agent.get_x() - 1, agent.get_y())) else 1.0
+            # TODO only search if lookahead neuron is connected
             input_data[11] = self.get_agent_blocked_in_direction(agent, agent.get_forward(), 20) 
             
             # TODO assuming that width == height
