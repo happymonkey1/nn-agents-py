@@ -88,8 +88,12 @@ class Gene:
         return Gene(source_type, source_id, sink_type, sink_id, weight)   
 
 class ActivationFunctions:
-    TANH = lambda x: (np.exp(x, dtype=np.float32) - np.exp(-x, dtype=np.float32)) / (np.exp(x, dtype=np.float32) + np.exp(-x, dtype=np.float32))
-    SIGMOID = lambda x: 1 / (1 + np.exp(-x, dtype=np.float32))
+    
+    
+    def TANH(x): 
+        return (np.exp(x, dtype=np.float32) - np.exp(-x, dtype=np.float32)) / (np.exp(x, dtype=np.float32) + np.exp(-x, dtype=np.float32))
+    def SIGMOID(x): 
+        return 1 / (1 + np.exp(-x, dtype=np.float32))
 
 class Network:
     def __init__(self, num_input: int, num_hidden: int, num_output:int, has_bias: bool = True):

@@ -4,7 +4,6 @@ import nn
 import random
 import numpy as np
 import time
-import joblib
 import math
 
 import networkx
@@ -13,12 +12,13 @@ import matplotlib.pyplot as plt
 # inputs: {last move X, last move Y, north/south border dist, east/west border dist, location X, location Y, nearest border distance}
 NUM_SENSORY_INPUTS = 15
 nn.set_num_input(NUM_SENSORY_INPUTS)
-nn.set_num_hidden(8)
+nn.set_num_hidden(2)
 
 
-GENOME_SIZE = 32
+GENOME_SIZE = 8
 nn.set_genome_size(GENOME_SIZE)
 
+DRAW_BRAIN_DEBUG = True
 
 class Actions:
     MOVE_UP = 0
@@ -49,6 +49,13 @@ class Agent:
         self.last_move = (0, 0)
         self.forward_direction = random.choice([Directions.UP, Directions.DOWN, Directions.LEFT, Directions.RIGHT])
     
+    def clone(self):
+        clone = Agent([gene for gene in self.brain.genome], self.get_loc())
+
+        clone.last_move = self.last_move
+        clone.forward_direction = self.forward_direction
+        
+        return clone
     def get_genome(self):
         return self.brain.genome
     
@@ -65,7 +72,9 @@ class Agent:
         return (r, g, b)
     
     def draw_brain(self):
-        G = networkx.DiGraph()
+        if not DRAW_BRAIN_DEBUG:
+            return
+        G = networkx.MultiDiGraph()
         
         edge_list = []
         
@@ -101,7 +110,10 @@ class Agent:
         
         G.add_edges_from(edge_list)
         
-        
+        for n in plt.get_fignums():
+            if n == len(plt.get_fignums()) - 1:
+                break
+            plt.close(n)
         
         val_map = { "LstMvX" : .25, "LstMvY" : .25, "NSDist" : .25, "EWDist" : .25, "EWPos" : .25, 
                    "NSPos" : .25, "NearBord" : .25, "NOcc" : .25, "SOcc" : .25, "EOcc" : .25, 
@@ -111,17 +123,23 @@ class Agent:
         
         node_color_values = [val_map.get(node, 0.5) for node in G.nodes()]
         
-        pos = networkx.multipartite_layout(G)
+        pos = networkx.spring_layout(G, k=1.5)
+        fig, ax = plt.subplots(nrows=1, ncols=1)
         networkx.draw_networkx_nodes(G, pos, cmap=plt.get_cmap('jet'), node_color=node_color_values, node_size=250)
-        networkx.draw_networkx_labels(G, pos)
+        networkx.draw_networkx_labels(G, pos, font_size=16, font_color="whitesmoke")
         networkx.draw_networkx_edges(G, pos, edgelist=edge_list, arrows=False)
+        fig.set_facecolor("gray")
+        ax.set_facecolor("gray")
+        plt.draw()
+        plt.pause(0.001)
+        #plt.show(block=False)
         
-        plt.show()
     
     def get_x(self):
         return self.location[0]
 
     def set_x(self, new_x):
+        assert new_x is not tuple
         if self.get_loc() is not None:
             self.last_move = (new_x - self.get_x(), self.get_y())
             if self.last_move[0] == 1:
@@ -134,11 +152,12 @@ class Agent:
         return self.location[1]
     
     def set_y(self, new_y):
+        assert new_y is not tuple
         if self.get_loc() is not None:
             self.last_move = (self.get_x(), new_y - self.get_y())
-            if self.last_move[1] == -1:
+            if self.last_move[1] == 1:
                 self.forward_direction = Directions.DOWN
-            elif self.last_move[1] == 1:
+            elif self.last_move[1] == -1:
                 self.forward_direction = Directions.UP
         self.location = (self.get_x(), new_y)
         
@@ -170,6 +189,8 @@ SCREEN_HEIGHT = 768
 class World:
     PHEROMONE_STEP_DURATION = 10
     PHEROMONES_ENABLED = False
+    
+    clone = None
     def __init__(self, width, height):
         self.width = width
         self.height = height
@@ -305,7 +326,9 @@ class World:
         
         print(f"There is {(len(diversity_map.keys()) / len(next_generation)) * 100:0.2f}% genetic diversity")
         
-        max_agent.draw_brain()
+        print(f"drawing brain of {max_val} agents")
+        World.clone = max_agent.clone()
+        World.clone.draw_brain()
         
         return next_generation
     
@@ -339,10 +362,10 @@ class World:
                 if not self.is_open_tile((x - i, y)):
                     return i / look_ahead
             elif direction == Directions.UP:
-                if not self.is_open_tile((x, y + i)):
+                if not self.is_open_tile((x, y - i)):
                     return i / look_ahead
             elif direction == Directions.DOWN:
-                if not self.is_open_tile((x, y - i)):
+                if not self.is_open_tile((x, y + i)):
                     return i / look_ahead
                 
         return 1.0
@@ -373,9 +396,9 @@ class World:
         mx, my = 0, 0
         dir = agent.get_forward()
         if dir == Directions.DOWN:
-            my = -1
-        elif dir == Directions.UP:
             my = 1
+        elif dir == Directions.UP:
+            my = -1
         elif dir == Directions.RIGHT:
             mx = 1
         elif dir == Directions.LEFT:
@@ -441,14 +464,14 @@ class World:
             
             # ===========
             
-            thought = np.argmax(outputs)
+            thought = np.argmax(np.abs(outputs))
             
             if thought == Actions.MOVE_UP:
-                new_loc = (agent.get_x(), agent.get_y() + 1)
+                new_loc = (agent.get_x(), agent.get_y() - 1)
                 if self.is_open_tile(new_loc):
                     self.move_agent_to(agent, new_loc)
             elif thought == Actions.MOVE_DOWN:
-                new_loc = (agent.get_x(), agent.get_y() - 1)
+                new_loc = (agent.get_x(), agent.get_y() + 1)
                 if self.is_open_tile(new_loc):
                     self.move_agent_to(agent, new_loc)
             elif thought == Actions.MOVE_RIGHT:
@@ -501,18 +524,22 @@ class World:
                     new_loc = (agent.get_x(), agent.get_y() + 1)
                     if self.is_open_tile(new_loc):
                         self.move_agent_to(agent, new_loc)
+                        agent.forward_direction = Directions.UP
                 elif dir == Directions.DOWN:
                     new_loc = (agent.get_x(), agent.get_y() - 1)
                     if self.is_open_tile(new_loc):
                         self.move_agent_to(agent, new_loc)
+                        agent.forward_direction = Directions.DOWN
                 elif dir == Directions.RIGHT:
                     new_loc = (agent.get_x() - 1, agent.get_y())
                     if self.is_open_tile(new_loc):
                         self.move_agent_to(agent, new_loc)
+                        agent.forward_direction = Directions.RIGHT
                 elif dir == Directions.LEFT:
                     new_loc = (agent.get_x() + 1, agent.get_y())
                     if self.is_open_tile(new_loc):
                         self.move_agent_to(agent, new_loc)
+                        agent.forward_direction = Directions.LEFT
             elif thought == Actions.STAND_STILL:
                 pass
             elif thought == Actions.RELEASE_PHEROMONE:
@@ -539,6 +566,7 @@ class World:
 
 pygame.init()
 
+plt.ion()
 
 screen = pygame.display.set_mode([SCREEN_WIDTH, SCREEN_HEIGHT])
 
